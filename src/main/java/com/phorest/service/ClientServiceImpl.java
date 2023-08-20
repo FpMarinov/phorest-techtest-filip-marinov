@@ -5,6 +5,7 @@ import com.phorest.model.csv.ClientCsvBean;
 import com.phorest.model.entity.Client;
 import com.phorest.model.request.ClientRequest;
 import com.phorest.model.response.ClientResponse;
+import com.phorest.repository.ClientDAO;
 import com.phorest.repository.ClientRepository;
 import com.phorest.validator.CsvBeanValidator;
 import java.time.LocalDate;
@@ -23,6 +24,7 @@ public class ClientServiceImpl implements ClientService {
   private final CsvService csvService;
 
   private final ClientRepository clientRepository;
+  private final ClientDAO clientDAO;
   private final CsvBeanValidator csvBeanValidator;
 
   private final ModelMapper modelMapper;
@@ -62,9 +64,12 @@ public class ClientServiceImpl implements ClientService {
   public List<ClientResponse> getTopClientsByLoyaltyPoints(
       int numberOfClients, LocalDate cutoffDate) {
 
-    return clientRepository
+    //    return clientRepository
+    //        .findTopNonBannedClientsWithMostLoyaltyPointsSinceCutoffDate(
+    //            cutoffDate.toString(), numberOfClients)
+    return clientDAO
         .findTopNonBannedClientsWithMostLoyaltyPointsSinceCutoffDate(
-            numberOfClients, cutoffDate.toString())
+            cutoffDate.toString(), numberOfClients)
         .stream()
         .map(client -> modelMapper.map(client, ClientResponse.class))
         .toList();

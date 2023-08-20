@@ -10,19 +10,19 @@ import lombok.Data;
 
 @Data
 public class AppointmentCsvBean extends CsvBean {
-  private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss xx";
+  public static final String APPOINTMENT_DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss xx";
 
   @NotNull
   @CsvBindByName(column = "id")
   private UUID id;
 
   @NotNull
-  @CsvDate(DATE_TIME_PATTERN)
+  @CsvDate(APPOINTMENT_DATE_TIME_PATTERN)
   @CsvBindByName(column = "start_time")
   private Instant startTime;
 
   @NotNull
-  @CsvDate(DATE_TIME_PATTERN)
+  @CsvDate(APPOINTMENT_DATE_TIME_PATTERN)
   @CsvBindByName(column = "end_time")
   private Instant endTime;
 

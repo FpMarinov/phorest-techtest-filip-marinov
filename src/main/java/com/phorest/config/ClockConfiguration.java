@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,7 +17,7 @@ import org.springframework.data.auditing.DateTimeProvider;
  */
 @Configuration
 public class ClockConfiguration {
-  private static final Instant LOCAL_INSTANT = Instant.parse("2023-08-17T00:05:00.00Z");
+  private static final Instant LOCAL_INSTANT = Instant.parse("2023-08-21T00:05:00.00Z");
 
   @Bean
   @ConditionalOnMissingBean
@@ -34,7 +33,6 @@ public class ClockConfiguration {
   }
 
   @Bean
-  @Autowired
   public DateTimeProvider timeProvider(Clock clock) {
     return () -> Optional.of(LocalDateTime.now(clock));
   }

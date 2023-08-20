@@ -1,7 +1,7 @@
 package com.phorest.model.csv;
 
+import static com.phorest.model.entity.Client.CLIENT_NAME_LENGTH_LIMIT;
 import static com.phorest.model.entity.Client.EMAIL_LENGTH_LIMIT;
-import static com.phorest.model.entity.Client.NAME_LENGTH_LIMIT;
 import static com.phorest.model.entity.Client.PHONE_LENGTH_LIMIT;
 
 import com.opencsv.bean.CsvBindByName;
@@ -21,12 +21,12 @@ public class ClientCsvBean extends CsvBean {
   private UUID id;
 
   @NotBlank
-  @Size(max = NAME_LENGTH_LIMIT)
+  @Size(max = CLIENT_NAME_LENGTH_LIMIT)
   @CsvBindByName(column = "first_name")
   private String firstName;
 
   @NotBlank
-  @Size(max = NAME_LENGTH_LIMIT)
+  @Size(max = CLIENT_NAME_LENGTH_LIMIT)
   @CsvBindByName(column = "last_name")
   private String lastName;
 

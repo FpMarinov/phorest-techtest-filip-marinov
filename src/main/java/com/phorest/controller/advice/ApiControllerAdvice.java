@@ -20,8 +20,8 @@ import java.time.Clock;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
@@ -40,10 +40,13 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class ApiControllerAdvice extends ResponseEntityExceptionHandler {
   public static final MediaType DEFAULT_RESPONSE_TYPE = MediaType.APPLICATION_JSON;
+  public static final String CONSTRAINT_VIOLATION_MESSAGE = "Constraint violation";
+  public static final String METHOD_ARGUMENT_NOT_VALID_MESSAGE = "Argument validation failed";
 
-  @Autowired private Clock clock;
+  private final Clock clock;
 
   // Base API exception
   @ExceptionHandler(BackendTechnicalTestException.class)
@@ -80,8 +83,6 @@ public class ApiControllerAdvice extends ResponseEntityExceptionHandler {
   // Entity constraint violation exception
   @ExceptionHandler(ConstraintViolationException.class)
   public ResponseEntity<Object> constraintViolationException(ConstraintViolationException ex) {
-    String message = "Constraint violation";
-
     Set<ConstraintViolation<?>> constraintViolations = ex.getConstraintViolations();
 
     List<ExceptionErrorField> errorFields =
@@ -95,7 +96,7 @@ public class ApiControllerAdvice extends ResponseEntityExceptionHandler {
             .sorted(Comparator.comparing(ExceptionErrorField::getFieldName))
             .collect(toList());
 
-    return getErrorMessage(message, CONSTRAINT_VIOLATION, errorFields);
+    return getErrorMessage(CONSTRAINT_VIOLATION_MESSAGE, CONSTRAINT_VIOLATION, errorFields);
   }
 
   // Internal API exception
@@ -112,7 +113,6 @@ public class ApiControllerAdvice extends ResponseEntityExceptionHandler {
       HttpHeaders headers,
       HttpStatusCode status,
       WebRequest request) {
-    String message = "Argument validation failed";
     BindingResult result = ex.getBindingResult();
 
     List<ExceptionErrorField> errorFields =
@@ -126,7 +126,7 @@ public class ApiControllerAdvice extends ResponseEntityExceptionHandler {
             .sorted(Comparator.comparing(ExceptionErrorField::getFieldName))
             .collect(toList());
 
-    return getErrorMessage(message, errorFields);
+    return getErrorMessage(METHOD_ARGUMENT_NOT_VALID_MESSAGE, errorFields);
   }
 
   @Override

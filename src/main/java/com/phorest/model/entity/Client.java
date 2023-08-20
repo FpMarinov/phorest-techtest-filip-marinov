@@ -25,7 +25,7 @@ import lombok.ToString;
 @Entity
 @Table(name = "client")
 public class Client extends AuditAt {
-  public static final int NAME_LENGTH_LIMIT = 50;
+  public static final int CLIENT_NAME_LENGTH_LIMIT = 50;
   public static final int EMAIL_LENGTH_LIMIT = 254;
   public static final int PHONE_LENGTH_LIMIT = 15;
 
@@ -34,18 +34,17 @@ public class Client extends AuditAt {
   private UUID id = UUID.randomUUID();
 
   @NotBlank
-  @Size(max = NAME_LENGTH_LIMIT)
+  @Size(max = CLIENT_NAME_LENGTH_LIMIT)
   @Column(name = "first_name")
   private String firstName;
 
   @NotBlank
-  @Size(max = NAME_LENGTH_LIMIT)
+  @Size(max = CLIENT_NAME_LENGTH_LIMIT)
   @Column(name = "last_name")
   private String lastName;
 
   @Email
   @NotBlank
-  @Size(max = EMAIL_LENGTH_LIMIT)
   @Column(name = "email")
   private String email;
 

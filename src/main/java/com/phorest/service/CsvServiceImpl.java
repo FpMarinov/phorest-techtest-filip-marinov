@@ -19,7 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class CsvServiceImpl implements CsvService {
-  private static final String CSV_CONTENT_TYPE = "text/csv";
+  public static final String CSV_CONTENT_TYPE = "text/csv";
 
   @Override
   @SneakyThrows(IOException.class)

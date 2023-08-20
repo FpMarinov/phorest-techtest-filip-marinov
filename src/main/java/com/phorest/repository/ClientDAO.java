@@ -1,15 +1,31 @@
 package com.phorest.repository;
 
-import com.phorest.model.entity.Client;
+import com.phorest.model.jdbc.ClientRow;
 import java.util.List;
-import java.util.UUID;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
 
-public interface ClientRepository extends JpaRepository<Client, UUID> {
-  String TOP_NON_BANNED_CLIENTS_WITH_MOST_LOYALTY_POINTS_SINCE_CUTOFF_DATE_QUERY =
-      """
+@Repository
+@RequiredArgsConstructor
+public class ClientDAO {
+  private final NamedParameterJdbcTemplate jdbcTemplate;
+
+  private final BeanPropertyRowMapper<ClientRow> rowMapper =
+      BeanPropertyRowMapper.newInstance(ClientRow.class);
+
+  public List<ClientRow> findTopNonBannedClientsWithMostLoyaltyPointsSinceCutoffDate(
+      String cutoffDate, int numberOfClients) {
+
+    MapSqlParameterSource parameters = new MapSqlParameterSource();
+
+    parameters.addValue("cutoff", cutoffDate);
+    parameters.addValue("number", numberOfClients);
+
+    String query =
+        """
           WITH purchase_union_service_cte AS (
               SELECT a.client_id, p.*
               FROM appointment a
@@ -35,14 +51,9 @@ public interface ClientRepository extends JpaRepository<Client, UUID> {
               ORDER BY client_loyalty_points DESC, first_name DESC
               LIMIT :number
           )
-          SELECT id, first_name, last_name, email, phone, gender, banned, created_at, updated_at
+          SELECT id, first_name, last_name, email, phone, gender, banned
           FROM client_cte;""";
 
-  @Query(
-      value = TOP_NON_BANNED_CLIENTS_WITH_MOST_LOYALTY_POINTS_SINCE_CUTOFF_DATE_QUERY,
-      nativeQuery = true)
-  List<Client> findTopNonBannedClientsWithMostLoyaltyPointsSinceCutoffDate(
-      @Param("cutoff") String cutoffDate, @Param("number") int numberOfClients);
-
-  List<Client> findByBannedFalse();
+    return jdbcTemplate.query(query, parameters, rowMapper);
+  }
 }
