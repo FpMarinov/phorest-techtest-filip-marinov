@@ -12,8 +12,7 @@
 	<artifactId>backend-tech-test</artifactId>
 	<version>1.0.0</version>
 	<name>Backend Technical Test</name>
-	<!-- TODO: Add desc. -->
-	<description>A REST API ...</description>
+	<description>Client API</description>
 
 	<properties>
 		<java.version>17</java.version>
