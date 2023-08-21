@@ -1,17 +1,20 @@
 package com.phorest.service;
 
 import com.opencsv.CSVReader;
-import com.opencsv.bean.CsvToBean;
-import com.opencsv.bean.CsvToBeanBuilder;
 import com.phorest.exception.InvalidCsvFileException;
+import com.phorest.factory.CsvBeanFactory;
 import com.phorest.model.csv.common.CsvBean;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import com.phorest.util.CsvUtils;
+import com.phorest.validator.CsvLineValidator;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -21,25 +24,51 @@ import org.springframework.web.multipart.MultipartFile;
 public class CsvServiceImpl implements CsvService {
   public static final String CSV_CONTENT_TYPE = "text/csv";
 
+  private final CsvBeanFactory csvBeanFactory;
+  private final CsvLineValidator csvLineValidator;
+
   @Override
-  @SneakyThrows(IOException.class)
-  public <T extends CsvBean> List<T> getElementsFromCsvFile(
-      MultipartFile file, Class<T> returnElementType) {
+  public <T extends CsvBean> Page<T> getElementsFromCsvFile(
+      MultipartFile file, Class<T> returnElementType, int page, int size) {
+
+    if (size <= 0 || page < 0) {
+      throw new IllegalArgumentException();
+    }
 
     if (file.isEmpty() || !CSV_CONTENT_TYPE.equals(file.getContentType())) {
       throw new InvalidCsvFileException();
     }
 
-    try (CSVReader csvReader =
-        new CSVReader(new InputStreamReader(new ByteArrayInputStream(file.getBytes())))) {
+    try (CSVReader csvReader = CsvUtils.buildCsvReader(file.getBytes())) {
+      Iterator<String[]> csvLineIterator = csvReader.iterator();
 
-      return parseCsv(csvReader, returnElementType);
+      String[] line = csvLineIterator.next();
+      csvLineValidator.validateFirstLine(line, returnElementType);
+
+      List<T> content = new ArrayList<>();
+      long offset = (long) page * (long) size;
+      long totalElementsProcessed = 0L;
+
+      while (csvLineIterator.hasNext()) {
+        line = csvLineIterator.next();
+        csvLineValidator.validateNonFirstLine(line, returnElementType);
+
+        if (isCurrentElementInPage(size, offset, totalElementsProcessed)) {
+          content.add(csvBeanFactory.buildCsvBean(line, returnElementType));
+        }
+
+        totalElementsProcessed++;
+      }
+
+      Pageable pageable = PageRequest.of(page, size);
+
+      return new PageImpl<>(content, pageable, totalElementsProcessed);
+    } catch (Exception e) {
+      throw new InvalidCsvFileException(e);
     }
   }
 
-  private <T extends CsvBean> List<T> parseCsv(CSVReader csvReader, Class<T> returnElementType) {
-    CsvToBean<T> csvToBean = new CsvToBeanBuilder<T>(csvReader).withType(returnElementType).build();
-
-    return csvToBean.parse();
+  private boolean isCurrentElementInPage(int size, long offset, long totalElementsProcessed) {
+    return offset <= totalElementsProcessed && totalElementsProcessed < offset + size;
   }
 }

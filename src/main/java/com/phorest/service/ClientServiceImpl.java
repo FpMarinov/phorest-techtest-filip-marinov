@@ -14,6 +14,7 @@ import java.util.UUID;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,6 +22,8 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class ClientServiceImpl implements ClientService {
+  private static final int CLIENT_FILE_PAGE_SIZE = 200;
+
   private final CsvService csvService;
 
   private final ClientRepository clientRepository;
@@ -32,13 +35,31 @@ public class ClientServiceImpl implements ClientService {
   @Override
   @Transactional
   public void createClientsFromFile(@NonNull MultipartFile file) {
+    int currentPageNumber = 0;
+    Page<ClientCsvBean> currentClientPage;
+    boolean isCurrentPageLast;
+
+    do {
+      currentClientPage =
+          csvService.getElementsFromCsvFile(
+              file, ClientCsvBean.class, currentPageNumber, CLIENT_FILE_PAGE_SIZE);
+
+      createClientsInPage(currentClientPage);
+
+      isCurrentPageLast = currentClientPage.isLast();
+
+      currentPageNumber++;
+    } while (!isCurrentPageLast);
+  }
+
+  private void createClientsInPage(Page<ClientCsvBean> clientPage) {
     List<Client> clients =
-        csvService.getElementsFromCsvFile(file, ClientCsvBean.class).stream()
+        clientPage.getContent().stream()
             .peek(csvBeanValidator::validateCsvBean)
             .map(csvBean -> modelMapper.map(csvBean, Client.class))
             .toList();
 
-    clientRepository.saveAll(clients);
+    clientRepository.saveAllAndFlush(clients);
   }
 
   @Override
@@ -64,12 +85,8 @@ public class ClientServiceImpl implements ClientService {
   public List<ClientResponse> getTopClientsByLoyaltyPoints(
       int numberOfClients, LocalDate cutoffDate) {
 
-    //    return clientRepository
-    //        .findTopNonBannedClientsWithMostLoyaltyPointsSinceCutoffDate(
-    //            cutoffDate.toString(), numberOfClients)
     return clientDAO
-        .findTopNonBannedClientsWithMostLoyaltyPointsSinceCutoffDate(
-            cutoffDate.toString(), numberOfClients)
+        .findTopNonBannedClientsWithMostLoyaltyPointsSinceCutoffDate(cutoffDate, numberOfClients)
         .stream()
         .map(client -> modelMapper.map(client, ClientResponse.class))
         .toList();

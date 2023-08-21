@@ -1,6 +1,5 @@
 package com.phorest.model.csv;
 
-import com.opencsv.bean.CsvBindByName;
 import com.phorest.model.csv.common.CsvBean;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -8,28 +7,23 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PurchaseCsvBean extends CsvBean {
-  @NotNull
-  @CsvBindByName(column = "id")
-  private UUID id;
+  @NotNull private UUID id;
 
-  @NotBlank
-  @CsvBindByName(column = "name")
-  private String name;
+  @NotBlank private String name;
 
-  @NotNull
-  @Positive
-  @CsvBindByName(column = "price")
-  private BigDecimal price;
+  @NotNull @Positive private BigDecimal price;
 
-  @PositiveOrZero
-  @CsvBindByName(column = "loyalty_points")
-  private int loyaltyPoints;
+  @PositiveOrZero private int loyaltyPoints;
 
-  @NotNull
-  @CsvBindByName(column = "appointment_id")
-  private UUID appointmentId;
+  @NotNull private UUID appointmentId;
 }

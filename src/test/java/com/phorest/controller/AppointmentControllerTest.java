@@ -1,13 +1,11 @@
 package com.phorest.controller;
 
-import static com.phorest.controller.advice.ApiControllerAdvice.CONSTRAINT_VIOLATION_MESSAGE;
 import static com.phorest.controller.advice.ApiControllerAdvice.METHOD_ARGUMENT_NOT_VALID_MESSAGE;
 import static com.phorest.exception.error.ApiError.APPOINTMENT_NOT_FOUND;
 import static com.phorest.exception.error.ApiError.BAD_REQUEST;
-import static com.phorest.exception.error.ApiError.CONSTRAINT_VIOLATION;
 import static com.phorest.exception.error.ApiError.INVALID_CSV_FILE;
-import static com.phorest.helper.JsonHelper.toJson;
-import static com.phorest.model.csv.AppointmentCsvBean.APPOINTMENT_DATE_TIME_PATTERN;
+import static com.phorest.factory.CsvBeanFactory.APPOINTMENT_FORMATTER;
+import static com.phorest.helper.JsonTestHelper.toJson;
 import static com.phorest.service.CsvServiceImpl.CSV_CONTENT_TYPE;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.hasSize;
@@ -31,11 +29,8 @@ import com.phorest.exception.InvalidCsvFileException;
 import com.phorest.model.entity.Appointment;
 import com.phorest.model.request.AppointmentRequest;
 import com.phorest.repository.AppointmentRepository;
-import java.io.ByteArrayInputStream;
-import java.io.InputStreamReader;
+import com.phorest.util.CsvUtils;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -58,9 +53,6 @@ public class AppointmentControllerTest {
       UUID.fromString("7416ebc3-12ce-4000-87fb-82973722ebf4");
   private static final UUID NON_EXISTENT_APPOINTMENT_ID =
       UUID.fromString("aca44e8b-e581-45b3-849f-956a26dbeef8");
-
-  private static final DateTimeFormatter APPOINTMENT_FORMATTER =
-      DateTimeFormatter.ofPattern(APPOINTMENT_DATE_TIME_PATTERN).withZone(ZoneOffset.UTC);
 
   @Autowired private AppointmentRepository appointmentRepository;
   @Autowired private MockMvc mockMvc;
@@ -288,7 +280,7 @@ public class AppointmentControllerTest {
   }
 
   @Test
-  public void createAppointmentsFromFile_AsAnonymousUserWithInvalidCsvFile_ExceptionBadRequest()
+  public void createAppointmentsFromFile_AsAnonymousUserWithInvalidCsvFile_ExceptionConflict()
       throws Exception {
     appointmentRepository.deleteAll();
     assertTrue(appointmentRepository.findAll().isEmpty());
@@ -299,13 +291,13 @@ public class AppointmentControllerTest {
 
     mockMvc
         .perform(multipart("/appointments/files").file(file))
-        .andExpect(status().isBadRequest())
+        .andExpect(status().isConflict())
         .andExpect(content().contentType(APPLICATION_JSON))
         .andExpect(jsonPath("$").isMap())
-        .andExpect(jsonPath("$", aMapWithSize(5)))
-        .andExpect(jsonPath("$.status").value(CONSTRAINT_VIOLATION.getHttpStatus().value()))
-        .andExpect(jsonPath("$.error_code").value(CONSTRAINT_VIOLATION.getErrorCode()))
-        .andExpect(jsonPath("$.message").value(CONSTRAINT_VIOLATION_MESSAGE));
+        .andExpect(jsonPath("$", aMapWithSize(4)))
+        .andExpect(jsonPath("$.status").value(INVALID_CSV_FILE.getHttpStatus().value()))
+        .andExpect(jsonPath("$.error_code").value(INVALID_CSV_FILE.getErrorCode()))
+        .andExpect(jsonPath("$.message").value(InvalidCsvFileException.MESSAGE));
   }
 
   @Test
@@ -368,9 +360,7 @@ public class AppointmentControllerTest {
     List<Appointment> appointments = appointmentRepository.findAll();
     assertFalse(appointments.isEmpty());
 
-    try (CSVReader csvReader =
-        new CSVReader(new InputStreamReader(new ByteArrayInputStream(file.getBytes())))) {
-
+    try (CSVReader csvReader = CsvUtils.buildCsvReader(file.getBytes())) {
       String[] line = csvReader.readNext();
       assertEquals(4, line.length);
       assertEquals("id", line[0]);

@@ -3,6 +3,7 @@ package com.phorest.service;
 import com.phorest.exception.AppointmentNotFoundException;
 import com.phorest.exception.PurchaseNotFoundException;
 import com.phorest.model.csv.PurchaseCsvBean;
+import com.phorest.model.entity.Appointment;
 import com.phorest.model.entity.Purchase;
 import com.phorest.model.request.PurchaseRequest;
 import com.phorest.model.response.PurchaseResponse;
@@ -10,10 +11,15 @@ import com.phorest.repository.AppointmentRepository;
 import com.phorest.repository.PurchaseRepository;
 import com.phorest.validator.CsvBeanValidator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,6 +27,8 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class PurchaseServiceImpl implements PurchaseService {
+  private static final int PURCHASE_FILE_PAGE_SIZE = 200;
+
   private final CsvService csvService;
 
   private final PurchaseRepository purchaseRepository;
@@ -32,25 +40,56 @@ public class PurchaseServiceImpl implements PurchaseService {
   @Override
   @Transactional
   public void createPurchasesFromFile(@NonNull MultipartFile file) {
-    List<Purchase> purchases =
-        csvService.getElementsFromCsvFile(file, PurchaseCsvBean.class).stream()
-            .peek(csvBeanValidator::validateCsvBean)
-            .map(this::csvBeanToEntity)
-            .toList();
+    int currentPageNumber = 0;
+    Page<PurchaseCsvBean> currentPurchasePage;
+    boolean isCurrentPageLast;
 
-    purchaseRepository.saveAll(purchases);
+    do {
+      currentPurchasePage =
+          csvService.getElementsFromCsvFile(
+              file, PurchaseCsvBean.class, currentPageNumber, PURCHASE_FILE_PAGE_SIZE);
+
+      createPurchasesInPage(currentPurchasePage);
+
+      isCurrentPageLast = currentPurchasePage.isLast();
+
+      currentPageNumber++;
+    } while (!isCurrentPageLast);
   }
 
-  private Purchase csvBeanToEntity(@NonNull PurchaseCsvBean csvBean) {
+  private void createPurchasesInPage(Page<PurchaseCsvBean> purchasePage) {
+    List<PurchaseCsvBean> purchaseCsvBeans = purchasePage.getContent();
+
+    Set<UUID> appointmentIds =
+        purchaseCsvBeans.stream()
+            .map(PurchaseCsvBean::getAppointmentId)
+            .collect(Collectors.toSet());
+
+    Map<UUID, Appointment> appointmentsById =
+        appointmentRepository.findByIdIn(appointmentIds).stream()
+            .collect(Collectors.toMap(Appointment::getId, Function.identity()));
+
+    List<Purchase> purchases =
+        purchaseCsvBeans.stream()
+            .peek(csvBeanValidator::validateCsvBean)
+            .map(csvBean -> csvBeanToEntity(csvBean, appointmentsById))
+            .toList();
+
+    purchaseRepository.saveAllAndFlush(purchases);
+  }
+
+  private Purchase csvBeanToEntity(
+      @NonNull PurchaseCsvBean csvBean, @NonNull Map<UUID, Appointment> appointmentsById) {
+
     Purchase purchase = modelMapper.map(csvBean, Purchase.class);
 
-    appointmentRepository
-        .findById(csvBean.getAppointmentId())
-        .ifPresentOrElse(
-            appointment -> appointment.addPurchase(purchase),
-            () -> {
-              throw new AppointmentNotFoundException(csvBean.getAppointmentId());
-            });
+    Appointment appointment = appointmentsById.get(csvBean.getAppointmentId());
+
+    if (appointment == null) {
+      throw new AppointmentNotFoundException(csvBean.getAppointmentId());
+    }
+
+    appointment.addPurchase(purchase);
 
     return purchase;
   }

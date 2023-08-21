@@ -1,10 +1,10 @@
 package com.phorest.service;
 
 import com.phorest.model.csv.common.CsvBean;
-import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface CsvService {
-  <T extends CsvBean> List<T> getElementsFromCsvFile(
-      MultipartFile file, Class<T> returnElementType);
+  <T extends CsvBean> Page<T> getElementsFromCsvFile(
+      MultipartFile file, Class<T> returnElementType, int page, int size);
 }

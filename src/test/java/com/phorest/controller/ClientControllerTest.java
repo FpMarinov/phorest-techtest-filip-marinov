@@ -1,12 +1,11 @@
 package com.phorest.controller;
 
-import static com.phorest.controller.advice.ApiControllerAdvice.CONSTRAINT_VIOLATION_MESSAGE;
 import static com.phorest.controller.advice.ApiControllerAdvice.METHOD_ARGUMENT_NOT_VALID_MESSAGE;
 import static com.phorest.exception.error.ApiError.BAD_REQUEST;
 import static com.phorest.exception.error.ApiError.CLIENT_NOT_FOUND;
-import static com.phorest.exception.error.ApiError.CONSTRAINT_VIOLATION;
 import static com.phorest.exception.error.ApiError.INVALID_CSV_FILE;
-import static com.phorest.helper.JsonHelper.toJson;
+import static com.phorest.helper.JsonTestHelper.fromJson;
+import static com.phorest.helper.JsonTestHelper.toJson;
 import static com.phorest.model.entity.Client.CLIENT_NAME_LENGTH_LIMIT;
 import static com.phorest.model.entity.Client.EMAIL_LENGTH_LIMIT;
 import static com.phorest.model.entity.Client.PHONE_LENGTH_LIMIT;
@@ -31,15 +30,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.opencsv.CSVReader;
 import com.phorest.exception.ClientNotFoundException;
 import com.phorest.exception.InvalidCsvFileException;
+import com.phorest.helper.ClientTestHelper;
 import com.phorest.model.entity.Client;
 import com.phorest.model.entity.Client.Gender;
-import com.phorest.model.entity.Purchase;
-import com.phorest.model.entity.Service;
 import com.phorest.model.request.ClientRequest;
 import com.phorest.model.response.ClientResponse;
 import com.phorest.repository.ClientRepository;
-import java.io.ByteArrayInputStream;
-import java.io.InputStreamReader;
+import com.phorest.util.CsvUtils;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -488,7 +485,7 @@ public class ClientControllerTest {
   }
 
   @Test
-  public void createClientsFromFile_AsAnonymousUserWithInvalidCsvFile_ExceptionBadRequest()
+  public void createClientsFromFile_AsAnonymousUserWithInvalidCsvFile_ExceptionConflict()
       throws Exception {
     clientRepository.deleteAll();
     assertTrue(clientRepository.findAll().isEmpty());
@@ -499,13 +496,13 @@ public class ClientControllerTest {
 
     mockMvc
         .perform(multipart("/clients/files").file(file))
-        .andExpect(status().isBadRequest())
+        .andExpect(status().isConflict())
         .andExpect(content().contentType(APPLICATION_JSON))
         .andExpect(jsonPath("$").isMap())
-        .andExpect(jsonPath("$", aMapWithSize(5)))
-        .andExpect(jsonPath("$.status").value(CONSTRAINT_VIOLATION.getHttpStatus().value()))
-        .andExpect(jsonPath("$.error_code").value(CONSTRAINT_VIOLATION.getErrorCode()))
-        .andExpect(jsonPath("$.message").value(CONSTRAINT_VIOLATION_MESSAGE));
+        .andExpect(jsonPath("$", aMapWithSize(4)))
+        .andExpect(jsonPath("$.status").value(INVALID_CSV_FILE.getHttpStatus().value()))
+        .andExpect(jsonPath("$.error_code").value(INVALID_CSV_FILE.getErrorCode()))
+        .andExpect(jsonPath("$.message").value(InvalidCsvFileException.MESSAGE));
   }
 
   @Test
@@ -564,9 +561,7 @@ public class ClientControllerTest {
     List<Client> clients = clientRepository.findAll();
     assertFalse(clients.isEmpty());
 
-    try (CSVReader csvReader =
-        new CSVReader(new InputStreamReader(new ByteArrayInputStream(file.getBytes())))) {
-
+    try (CSVReader csvReader = CsvUtils.buildCsvReader(file.getBytes())) {
       String[] line = csvReader.readNext();
       assertEquals(7, line.length);
       assertEquals("id", line[0]);
@@ -590,12 +585,13 @@ public class ClientControllerTest {
       }
     }
   }
- 
+
   @Transactional
   @ParameterizedTest
   @ValueSource(strings = {"2016-06-01", "2016-12-31", "2017-09-01", "2018-03-01", "2018-08-01"})
   @Sql({"classpath:dataset/truncate.sql", "classpath:dataset/controller/all_data.sql"})
-  public void topClientsTest(String cutoffDateString) throws Exception {
+  public void getTopClients_AsAnonymousUser_ReturnExpectedClients(String cutoffDateString)
+      throws Exception {
     int clientNumber = 50;
 
     Instant cutoffInstant = Instant.parse("%sT00:00:00.00Z".formatted(cutoffDateString));
@@ -613,50 +609,29 @@ public class ClientControllerTest {
             .getContentAsString();
 
     List<ClientResponse> clientResponses =
-        mapper.readValue(responseString, new TypeReference<>() {});
+        fromJson(mapper, responseString, new TypeReference<>() {});
 
-    List<Client> nonBannedClients = clientRepository.findByBannedFalse();
+    assertTrue(clientResponses.size() <= clientNumber);
 
-    nonBannedClients.sort((c1, c2) -> getClientLoyaltyPointComparison(c1, c2, cutoffInstant));
+    List<Client> topClientsFromMemory =
+        ClientTestHelper.getTopClientsWithFilteringAndSortingInMemory(
+            clientNumber, cutoffInstant, clientRepository);
 
-    List<Client> topClients = nonBannedClients.subList(0, clientNumber);
+    assertEquals(topClientsFromMemory.size(), clientResponses.size());
 
-    assertEquals(topClients.size(), clientResponses.size());
-
-    for (int i = 0; i < topClients.size(); i++) {
-      Client client = topClients.get(i);
+    for (int i = 0; i < topClientsFromMemory.size(); i++) {
+      Client clientFromMemory = topClientsFromMemory.get(i);
       ClientResponse clientResponse = clientResponses.get(i);
 
-      assertEquals(client.getId(), clientResponse.getId());
+      assertFalse(clientResponse.isBanned());
+
+      assertEquals(clientFromMemory.getId(), clientResponse.getId());
+      assertEquals(clientFromMemory.getFirstName(), clientResponse.getFirstName());
+      assertEquals(clientFromMemory.getLastName(), clientResponse.getLastName());
+      assertEquals(clientFromMemory.getEmail(), clientResponse.getEmail());
+      assertEquals(clientFromMemory.getPhone(), clientResponse.getPhone());
+      assertEquals(clientFromMemory.getGender(), clientResponse.getGender());
+      assertEquals(clientFromMemory.isBanned(), clientResponse.isBanned());
     }
-  }
-
-  private int getClientLoyaltyPointComparison(Client c1, Client c2, Instant cutoffInstant) {
-    int loyaltyPointComparison =
-        getClientLoyaltyPoints(c2, cutoffInstant) - getClientLoyaltyPoints(c1, cutoffInstant);
-
-    if (loyaltyPointComparison != 0) {
-      return loyaltyPointComparison;
-    } else {
-      return c2.getFirstName().compareTo(c1.getFirstName());
-    }
-  }
-
-  private int getClientLoyaltyPoints(Client client, Instant cutoffInstant) {
-    int purchaseLoyaltyPoints =
-        client.getAppointments().stream()
-            .filter(appointment -> appointment.getStartTime().isAfter(cutoffInstant))
-            .flatMap(appointment -> appointment.getPurchases().stream())
-            .mapToInt(Purchase::getLoyaltyPoints)
-            .sum();
-
-    int serviceLoyaltyPoints =
-        client.getAppointments().stream()
-            .filter(appointment -> appointment.getStartTime().isAfter(cutoffInstant))
-            .flatMap(appointment -> appointment.getServices().stream())
-            .mapToInt(Service::getLoyaltyPoints)
-            .sum();
-
-    return purchaseLoyaltyPoints + serviceLoyaltyPoints;
   }
 }

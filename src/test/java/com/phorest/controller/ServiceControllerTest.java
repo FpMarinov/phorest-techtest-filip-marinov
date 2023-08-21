@@ -1,12 +1,10 @@
 package com.phorest.controller;
 
-import static com.phorest.controller.advice.ApiControllerAdvice.CONSTRAINT_VIOLATION_MESSAGE;
 import static com.phorest.controller.advice.ApiControllerAdvice.METHOD_ARGUMENT_NOT_VALID_MESSAGE;
 import static com.phorest.exception.error.ApiError.BAD_REQUEST;
-import static com.phorest.exception.error.ApiError.CONSTRAINT_VIOLATION;
 import static com.phorest.exception.error.ApiError.INVALID_CSV_FILE;
 import static com.phorest.exception.error.ApiError.SERVICE_NOT_FOUND;
-import static com.phorest.helper.JsonHelper.toJson;
+import static com.phorest.helper.JsonTestHelper.toJson;
 import static com.phorest.model.entity.Service.SERVICE_NAME_LENGTH_LIMIT;
 import static com.phorest.service.CsvServiceImpl.CSV_CONTENT_TYPE;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -31,8 +29,7 @@ import com.phorest.exception.ServiceNotFoundException;
 import com.phorest.model.entity.Service;
 import com.phorest.model.request.ServiceRequest;
 import com.phorest.repository.ServiceRepository;
-import java.io.ByteArrayInputStream;
-import java.io.InputStreamReader;
+import com.phorest.util.CsvUtils;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -451,7 +448,7 @@ public class ServiceControllerTest {
   }
 
   @Test
-  public void createServicesFromFile_AsAnonymousUserWithInvalidCsvFile_ExceptionBadRequest()
+  public void createServicesFromFile_AsAnonymousUserWithInvalidCsvFile_ExceptionConflict()
       throws Exception {
     serviceRepository.deleteAll();
     assertTrue(serviceRepository.findAll().isEmpty());
@@ -462,13 +459,13 @@ public class ServiceControllerTest {
 
     mockMvc
         .perform(multipart("/services/files").file(file))
-        .andExpect(status().isBadRequest())
+        .andExpect(status().isConflict())
         .andExpect(content().contentType(APPLICATION_JSON))
         .andExpect(jsonPath("$").isMap())
-        .andExpect(jsonPath("$", aMapWithSize(5)))
-        .andExpect(jsonPath("$.status").value(CONSTRAINT_VIOLATION.getHttpStatus().value()))
-        .andExpect(jsonPath("$.error_code").value(CONSTRAINT_VIOLATION.getErrorCode()))
-        .andExpect(jsonPath("$.message").value(CONSTRAINT_VIOLATION_MESSAGE));
+        .andExpect(jsonPath("$", aMapWithSize(4)))
+        .andExpect(jsonPath("$.status").value(INVALID_CSV_FILE.getHttpStatus().value()))
+        .andExpect(jsonPath("$.error_code").value(INVALID_CSV_FILE.getErrorCode()))
+        .andExpect(jsonPath("$.message").value(InvalidCsvFileException.MESSAGE));
   }
 
   @Test
@@ -528,9 +525,7 @@ public class ServiceControllerTest {
     List<Service> services = serviceRepository.findAll();
     assertFalse(services.isEmpty());
 
-    try (CSVReader csvReader =
-        new CSVReader(new InputStreamReader(new ByteArrayInputStream(file.getBytes())))) {
-
+    try (CSVReader csvReader = CsvUtils.buildCsvReader(file.getBytes())) {
       String[] line = csvReader.readNext();
       assertEquals(5, line.length);
       assertEquals("id", line[0]);
